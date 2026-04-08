@@ -26,6 +26,7 @@ use alacritty_terminal::event_loop::{EventLoop as PtyEventLoop, Msg, Notifier};
 use alacritty_terminal::grid::{Dimensions, Scroll};
 use alacritty_terminal::index::Direction;
 use alacritty_terminal::sync::FairMutex;
+use parking_lot::MutexGuard;
 use alacritty_terminal::term::test::TermSize;
 use alacritty_terminal::term::{Term, TermMode};
 use alacritty_terminal::tty;
@@ -336,6 +337,16 @@ impl WindowContext {
     #[cfg(unix)]
     pub fn config(&self) -> &UiConfig {
         &self.config
+    }
+
+    /// Get a lock on the terminal.
+    pub fn terminal(&self) -> MutexGuard<'_, Term<EventProxy>> {
+        self.terminal.lock()
+    }
+
+    /// Get the notifier for sending messages to the PTY.
+    pub fn notifier(&self) -> &Notifier {
+        &self.notifier
     }
 
     /// Clear the window config overrides.

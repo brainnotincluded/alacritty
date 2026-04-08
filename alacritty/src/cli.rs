@@ -175,6 +175,11 @@ impl TerminalOptions {
         Some(Program::WithArgs { program: program.clone(), args: args.to_vec() })
     }
 
+    /// Set the command to execute.
+    pub fn set_command(&mut self, program: String, args: Vec<String>) {
+        self.command = std::iter::once(program).chain(args).collect();
+    }
+
     /// Override the [`PtyOptions`]'s fields with the [`TerminalOptions`].
     pub fn override_pty_config(&self, pty_config: &mut PtyOptions) {
         if let Some(working_directory) = &self.working_directory {
@@ -235,6 +240,8 @@ impl WindowIdentity {
 pub enum Subcommands {
     #[cfg(unix)]
     Msg(MessageOptions),
+    #[cfg(unix)]
+    Control(ControlOptions),
     Migrate(MigrateOptions),
 }
 
@@ -251,9 +258,182 @@ pub struct MessageOptions {
     pub message: SocketMessage,
 }
 
+/// Control options for the Alacritty socket.
+#[cfg(unix)]
+#[derive(Args, Debug)]
+pub struct ControlOptions {
+    /// IPC socket connection path override.
+    #[clap(short, long, value_hint = ValueHint::FilePath)]
+    pub socket: Option<PathBuf>,
+
+    /// Target window ID (use -1 for all windows).
+    #[clap(short, long, allow_hyphen_values = true, env = "ALACRITTY_WINDOW_ID")]
+    pub window_id: Option<i128>,
+
+    /// Control command to execute.
+    #[clap(subcommand)]
+    pub command: ControlCommand,
+}
+
+/// Available control commands.
+#[cfg(unix)]
+#[derive(Subcommand, Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub enum ControlCommand {
+    /// Window control commands.
+    #[clap(subcommand)]
+    Window(WindowCommand),
+    /// Terminal control commands.
+    #[clap(subcommand)]
+    Terminal(TerminalCommand),
+    /// Configuration commands.
+    #[clap(subcommand)]
+    Config(ConfigCommand),
+    /// Session management commands.
+    #[clap(subcommand)]
+    Session(SessionCommand),
+    /// Cursor control commands.
+    #[clap(subcommand)]
+    Cursor(CursorCommand),
+    /// Selection commands.
+    #[clap(subcommand)]
+    Selection(SelectionCommand),
+}
+
+/// Window control commands.
+#[cfg(unix)]
+#[derive(Subcommand, Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub enum WindowCommand {
+    /// Minimize the window.
+    Minimize,
+    /// Maximize the window.
+    Maximize,
+    /// Restore the window from minimized/maximized state.
+    Restore,
+    /// Toggle fullscreen mode.
+    ToggleFullscreen,
+    /// Enable/disable fullscreen.
+    Fullscreen { enabled: bool },
+    /// Toggle maximized state.
+    ToggleMaximized,
+    /// Focus the window.
+    Focus,
+    /// Set window urgency hint.
+    Urgent { urgent: bool },
+    /// Set window title.
+    Title { title: String },
+    /// Set window opacity (0.0 - 1.0).
+    Opacity { opacity: f64 },
+    /// Enable/disable window blur.
+    Blur { blur: bool },
+    /// Show/hide the window.
+    Visible { visible: bool },
+    /// Move window to position.
+    Move { x: i32, y: i32 },
+    /// Resize window.
+    Resize { width: u32, height: u32 },
+    /// Get window information.
+    Info,
+    /// Close the window.
+    Close,
+    /// List all windows.
+    List,
+}
+
+/// Terminal control commands.
+#[cfg(unix)]
+#[derive(Subcommand, Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub enum TerminalCommand {
+    /// Send text to the terminal.
+    Send { text: String },
+    /// Send key sequence (e.g., "C-c" for Ctrl+C).
+    Key { key: String },
+    /// Scroll up by lines.
+    ScrollUp { lines: usize },
+    /// Scroll down by lines.
+    ScrollDown { lines: usize },
+    /// Scroll to top.
+    ScrollTop,
+    /// Scroll to bottom.
+    ScrollBottom,
+    /// Clear the screen.
+    Clear,
+    /// Copy selection to clipboard.
+    Copy,
+    /// Paste from clipboard.
+    Paste,
+    /// Get terminal content.
+    Content { start: Option<usize>, end: Option<usize> },
+    /// Get terminal size.
+    Size,
+    /// Set terminal size (cols x rows).
+    Resize { cols: usize, rows: usize },
+}
+
+/// Configuration commands.
+#[cfg(unix)]
+#[derive(Subcommand, Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub enum ConfigCommand {
+    /// Reload configuration from file.
+    Reload,
+    /// Get current configuration.
+    Get,
+    /// Set configuration option.
+    Set { option: String, value: String },
+    /// Reset configuration option to default.
+    Reset { option: String },
+}
+
+/// Session management commands.
+#[cfg(unix)]
+#[derive(Subcommand, Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub enum SessionCommand {
+    /// Create a new window.
+    NewWindow {
+        /// Working directory for the new window.
+        #[clap(short, long)]
+        working_directory: Option<PathBuf>,
+        /// Command to execute.
+        #[clap(short, long)]
+        command: Option<String>,
+        /// Window title.
+        #[clap(short, long)]
+        title: Option<String>,
+    },
+    /// List all windows.
+    List,
+    /// Get active window ID.
+    Active,
+    /// Shutdown Alacritty daemon.
+    Shutdown,
+}
+
+/// Cursor control commands.
+#[cfg(unix)]
+#[derive(Subcommand, Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub enum CursorCommand {
+    /// Get cursor position.
+    Pos,
+    /// Set cursor style (Block, Beam, Underline, HollowBlock).
+    Style { style: String },
+    /// Enable/disable cursor blinking.
+    Blink { blinking: bool },
+}
+
+/// Selection commands.
+#[cfg(unix)]
+#[derive(Subcommand, Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub enum SelectionCommand {
+    /// Get selection text.
+    Get,
+    /// Clear selection.
+    Clear,
+    /// Select all.
+    All,
+}
+
 /// Available socket messages.
 #[cfg(unix)]
-#[derive(Subcommand, Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Subcommand, Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub enum SocketMessage {
     /// Create a new window in the same Alacritty process.
     CreateWindow(WindowOptions),

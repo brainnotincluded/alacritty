@@ -15,7 +15,29 @@ use winit::event_loop::EventLoopProxy;
 use winit::window::WindowId;
 
 use crate::cli::{Options, SocketMessage};
+use crate::control::{ControlMessage, ControlResponse};
 use crate::event::{Event, EventType};
+
+/// All IPC message types.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub enum IpcMessage {
+    /// Standard socket messages.
+    Socket(SocketMessage),
+    /// Control messages.
+    Control(ControlMessage),
+}
+
+impl From<SocketMessage> for IpcMessage {
+    fn from(msg: SocketMessage) -> Self {
+        IpcMessage::Socket(msg)
+    }
+}
+
+impl From<ControlMessage> for IpcMessage {
+    fn from(msg: ControlMessage) -> Self {
+        IpcMessage::Control(msg)
+    }
+}
 
 /// Environment variable name for the IPC socket path.
 const ALACRITTY_SOCKET_ENV: &str = "ALACRITTY_SOCKET";
@@ -59,30 +81,41 @@ impl IpcListener {
             Ok(_) => (),
         };
 
-        let message: SocketMessage = match serde_json::from_str(&self.data) {
+        // Try to parse as IpcMessage first (new format), then fall back to SocketMessage (old format)
+        let ipc_message: IpcMessage = match serde_json::from_str(&self.data) {
             Ok(message) => message,
-            Err(err) => {
-                warn!("Failed to parse IPC message: {err}");
-                return Ok(());
+            Err(_) => {
+                // Try legacy SocketMessage format
+                match serde_json::from_str::<SocketMessage>(&self.data) {
+                    Ok(socket_msg) => IpcMessage::Socket(socket_msg),
+                    Err(err) => {
+                        warn!("Failed to parse IPC message: {err}");
+                        return Ok(());
+                    },
+                }
             },
         };
 
         // Handle IPC events.
-        match message {
-            SocketMessage::CreateWindow(options) => {
+        match ipc_message {
+            IpcMessage::Socket(SocketMessage::CreateWindow(options)) => {
                 let event = Event::new(EventType::CreateWindow(options), None);
                 let _ = self.event_proxy.send_event(event);
             },
-            SocketMessage::Config(ipc_config) => {
+            IpcMessage::Socket(SocketMessage::Config(ipc_config)) => {
                 let window_id =
                     ipc_config.window_id.and_then(|id| u64::try_from(id).ok()).map(WindowId::from);
                 let event = Event::new(EventType::IpcConfig(ipc_config), window_id);
                 let _ = self.event_proxy.send_event(event);
             },
-            SocketMessage::GetConfig(config) => {
+            IpcMessage::Socket(SocketMessage::GetConfig(config)) => {
                 let window_id =
                     config.window_id.and_then(|id| u64::try_from(id).ok()).map(WindowId::from);
                 let event = Event::new(EventType::IpcGetConfig(Arc::new(stream)), window_id);
+                let _ = self.event_proxy.send_event(event);
+            },
+            IpcMessage::Control(control_msg) => {
+                let event = Event::new(EventType::Control(Arc::new(stream), control_msg), None);
                 let _ = self.event_proxy.send_event(event);
             },
         }
@@ -92,11 +125,12 @@ impl IpcListener {
 }
 
 /// Send a message to the active Alacritty socket.
-pub fn send_message(socket: Option<PathBuf>, message: SocketMessage) -> IoResult<()> {
+pub fn send_message(socket: Option<PathBuf>, message: impl Into<IpcMessage>) -> IoResult<()> {
     let mut socket = find_socket(socket)?;
+    let ipc_message = message.into();
 
     // Write message to socket.
-    let message_json = serde_json::to_string(&message)?;
+    let message_json = serde_json::to_string(&ipc_message)?;
     socket.write_all(message_json.as_bytes())?;
     let _ = socket.flush();
 
@@ -104,13 +138,13 @@ pub fn send_message(socket: Option<PathBuf>, message: SocketMessage) -> IoResult
     socket.shutdown(Shutdown::Write)?;
 
     // Get matching IPC reply.
-    handle_reply(&socket, &message)?;
+    handle_reply(&socket, &ipc_message)?;
 
     Ok(())
 }
 
 /// Process IPC responses.
-fn handle_reply(stream: &UnixStream, message: &SocketMessage) -> IoResult<()> {
+fn handle_reply(stream: &UnixStream, message: &IpcMessage) -> IoResult<()> {
     // Read reply, returning early if there is none.
     let mut buffer = String::new();
     let mut reader = BufReader::new(stream);
@@ -125,8 +159,41 @@ fn handle_reply(stream: &UnixStream, message: &SocketMessage) -> IoResult<()> {
     // Ensure reply matches request.
     match (message, &reply) {
         // Write requested config to STDOUT.
-        (SocketMessage::GetConfig(..), SocketReply::GetConfig(config)) => {
+        (IpcMessage::Socket(SocketMessage::GetConfig(..)), SocketReply::GetConfig(config)) => {
             println!("{config}");
+            Ok(())
+        },
+        // Write control response to STDOUT.
+        (IpcMessage::Control(..), SocketReply::Control(response)) => {
+            match response {
+                ControlResponse::Ok => println!("OK"),
+                ControlResponse::Text(text) => println!("{text}"),
+                ControlResponse::WindowInfo { id, title, size, position, is_focused, is_maximized, is_fullscreen, is_minimized } => {
+                    println!("Window ID: {}", id);
+                    println!("Title: {}", title);
+                    println!("Size: {}x{}", size.0, size.1);
+                    println!("Position: {}, {}", position.0, position.1);
+                    println!("Focused: {}", is_focused);
+                    println!("Maximized: {}", is_maximized);
+                    println!("Fullscreen: {}", is_fullscreen);
+                    println!("Minimized: {}", is_minimized);
+                },
+                ControlResponse::TerminalSize { cols, rows } => {
+                    println!("{}x{}", cols, rows);
+                },
+                ControlResponse::CursorPosition { col, row } => {
+                    println!("{}, {}", col, row);
+                },
+                ControlResponse::WindowList(windows) => {
+                    for id in windows {
+                        println!("{}", id);
+                    }
+                },
+                ControlResponse::Error(err) => {
+                    eprintln!("Error: {err}");
+                    return Err(IoError::other(err.clone()));
+                },
+            }
             Ok(())
         },
         // Ignore requests without reply.
@@ -235,4 +302,5 @@ pub fn socket_prefix() -> String {
 #[derive(Serialize, Deserialize, Debug)]
 pub enum SocketReply {
     GetConfig(String),
+    Control(ControlResponse),
 }

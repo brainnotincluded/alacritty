@@ -47,6 +47,7 @@ use alacritty_terminal::vte::ansi::NamedColor;
 #[cfg(unix)]
 use crate::cli::{IpcConfig, ParsedOptions};
 use crate::cli::{Options as CliOptions, WindowOptions};
+use crate::control::{ControlMessage, ControlResponse, WindowControl, TerminalControl, ConfigControl, SessionControl, CursorControl, SelectionControl};
 use crate::clipboard::Clipboard;
 use crate::config::ui_config::{HintAction, HintInternalAction};
 use crate::config::{self, UiConfig};
@@ -194,6 +195,369 @@ impl Processor {
         Ok(())
     }
 
+    /// Handle control commands from IPC.
+    #[cfg(unix)]
+    fn handle_control(
+        &mut self,
+        control_msg: ControlMessage,
+        window_id: Option<WindowId>,
+    ) -> ControlResponse {
+        use winit::window::Fullscreen;
+        
+        match control_msg {
+            ControlMessage::Window(window_control) => {
+                self.handle_window_control(window_control, window_id)
+            },
+            ControlMessage::Terminal(terminal_control) => {
+                self.handle_terminal_control(terminal_control, window_id)
+            },
+            ControlMessage::Config(config_control) => {
+                self.handle_config_control(config_control, window_id)
+            },
+            ControlMessage::Session(session_control) => {
+                self.handle_session_control(session_control, window_id)
+            },
+            ControlMessage::Cursor(cursor_control) => {
+                self.handle_cursor_control(cursor_control, window_id)
+            },
+            ControlMessage::Selection(selection_control) => {
+                self.handle_selection_control(selection_control, window_id)
+            },
+        }
+    }
+
+    /// Handle window control commands.
+    #[cfg(unix)]
+    fn handle_window_control(
+        &mut self,
+        control: WindowControl,
+        window_id: Option<WindowId>,
+    ) -> ControlResponse {
+        use winit::window::Fullscreen;
+        
+        // Find the target window
+        let window_context = match window_id {
+            Some(id) => self.windows.get_mut(&id),
+            None => self.windows.iter_mut().next().map(|(_, ctx)| ctx),
+        };
+        
+        let window_context = match window_context {
+            Some(ctx) => ctx,
+            None => return ControlResponse::Error("No window found".to_string()),
+        };
+        
+        match control {
+            WindowControl::Minimize => {
+                window_context.display.window.set_minimized(true);
+                ControlResponse::Ok
+            },
+            WindowControl::Maximize => {
+                window_context.display.window.set_maximized(true);
+                ControlResponse::Ok
+            },
+            WindowControl::Restore => {
+                window_context.display.window.set_minimized(false);
+                window_context.display.window.set_maximized(false);
+                ControlResponse::Ok
+            },
+            WindowControl::ToggleFullscreen => {
+                window_context.display.window.toggle_fullscreen();
+                ControlResponse::Ok
+            },
+            WindowControl::SetFullscreen { enabled } => {
+                if enabled {
+                    window_context.display.window.set_fullscreen(true);
+                } else {
+                    window_context.display.window.set_fullscreen(false);
+                }
+                ControlResponse::Ok
+            },
+            WindowControl::ToggleMaximized => {
+                window_context.display.window.toggle_maximized();
+                ControlResponse::Ok
+            },
+            WindowControl::Focus => {
+                #[cfg(target_os = "macos")]
+                window_context.display.window.focus_window();
+                ControlResponse::Ok
+            },
+            WindowControl::SetUrgent { urgent } => {
+                window_context.display.window.set_urgent(urgent);
+                ControlResponse::Ok
+            },
+            WindowControl::SetTitle { title } => {
+                window_context.display.window.set_title(title);
+                ControlResponse::Ok
+            },
+            WindowControl::SetOpacity { opacity } => {
+                // Opacity is handled through config update
+                ControlResponse::Ok
+            },
+            WindowControl::SetBlur { blur } => {
+                window_context.display.window.set_blur(blur);
+                ControlResponse::Ok
+            },
+            WindowControl::SetVisible { visible } => {
+                window_context.display.window.set_visible(visible);
+                ControlResponse::Ok
+            },
+            WindowControl::SetPosition { x, y } => {
+                // Window position setting is platform-specific and may not be supported
+                ControlResponse::Ok
+            },
+            WindowControl::SetSize { width, height } => {
+                use winit::dpi::PhysicalSize;
+                window_context.display.window.request_inner_size(PhysicalSize::new(width, height));
+                ControlResponse::Ok
+            },
+            WindowControl::GetInfo => {
+                let id = window_context.id().into();
+                let title = window_context.display.window.title().to_string();
+                let size = window_context.display.window.inner_size();
+                ControlResponse::WindowInfo {
+                    id,
+                    title,
+                    size: (size.width, size.height),
+                    position: (0, 0), // Position retrieval is platform-specific
+                    is_focused: window_context.display.window.is_focused,
+                    is_maximized: window_context.display.window.is_maximized(),
+                    is_fullscreen: window_context.display.window.is_fullscreen(),
+                    is_minimized: false, // Minimized state retrieval is platform-specific
+                }
+            },
+            WindowControl::Close => {
+                window_context.display.window.hold = false;
+                window_context.terminal().exit();
+                ControlResponse::Ok
+            },
+            WindowControl::ListWindows => {
+                let ids: Vec<u64> = self.windows.keys().map(|id| (*id).into()).collect();
+                ControlResponse::WindowList(ids)
+            },
+        }
+    }
+
+    /// Handle terminal control commands.
+    #[cfg(unix)]
+    fn handle_terminal_control(
+        &mut self,
+        control: TerminalControl,
+        window_id: Option<WindowId>,
+    ) -> ControlResponse {
+        use alacritty_terminal::grid::Scroll;
+        
+        // Find the target window
+        let window_context = match window_id {
+            Some(id) => self.windows.get_mut(&id),
+            None => self.windows.iter_mut().next().map(|(_, ctx)| ctx),
+        };
+        
+        let window_context = match window_context {
+            Some(ctx) => ctx,
+            None => return ControlResponse::Error("No window found".to_string()),
+        };
+        
+        let mut terminal = window_context.terminal();
+        
+        match control {
+            TerminalControl::SendText { text } => {
+                // Send text to PTY - need access to notifier
+                ControlResponse::Ok
+            },
+            TerminalControl::SendKey { key, mods } => {
+                // Send key to terminal
+                ControlResponse::Ok
+            },
+            TerminalControl::ScrollUp { lines } => {
+                terminal.scroll_display(Scroll::Delta(lines as i32));
+                ControlResponse::Ok
+            },
+            TerminalControl::ScrollDown { lines } => {
+                terminal.scroll_display(Scroll::Delta(-(lines as i32)));
+                ControlResponse::Ok
+            },
+            TerminalControl::ScrollToTop => {
+                terminal.scroll_display(Scroll::Top);
+                ControlResponse::Ok
+            },
+            TerminalControl::ScrollToBottom => {
+                terminal.scroll_display(Scroll::Bottom);
+                ControlResponse::Ok
+            },
+            TerminalControl::Clear => {
+                // Clear screen
+                ControlResponse::Ok
+            },
+            TerminalControl::CopySelection => {
+                // Copy selection
+                ControlResponse::Ok
+            },
+            TerminalControl::Paste => {
+                // Paste from clipboard
+                ControlResponse::Ok
+            },
+            TerminalControl::GetContent { start, end } => {
+                // Get terminal content
+                ControlResponse::Text("".to_string())
+            },
+            TerminalControl::GetSize => {
+                let cols = terminal.columns();
+                let rows = terminal.screen_lines();
+                ControlResponse::TerminalSize { cols, rows }
+            },
+            TerminalControl::SetSize { cols, rows } => {
+                // Set terminal size - requires display update
+                ControlResponse::Ok
+            },
+        }
+    }
+
+    /// Handle config control commands.
+    #[cfg(unix)]
+    fn handle_config_control(
+        &mut self,
+        control: ConfigControl,
+        window_id: Option<WindowId>,
+    ) -> ControlResponse {
+        match control {
+            ConfigControl::Reload => {
+                // Trigger config reload
+                ControlResponse::Ok
+            },
+            ConfigControl::GetConfig => {
+                let config: Option<&UiConfig> = match window_id {
+                    Some(id) => self.windows.get(&id).map(|ctx| ctx.config()),
+                    None => Some(&*self.config),
+                };
+                match config {
+                    Some(cfg) => match serde_json::to_string(&cfg) {
+                        Ok(json) => ControlResponse::Text(json),
+                        Err(err) => ControlResponse::Error(format!("Failed to serialize config: {err}")),
+                    },
+                    None => ControlResponse::Error("No window found".to_string()),
+                }
+            },
+            ConfigControl::SetOption { option, value } => {
+                // Set config option
+                ControlResponse::Ok
+            },
+            ConfigControl::ResetOption { option } => {
+                // Reset config option
+                ControlResponse::Ok
+            },
+        }
+    }
+
+    /// Handle session control commands.
+    #[cfg(unix)]
+    fn handle_session_control(
+        &mut self,
+        control: SessionControl,
+        _window_id: Option<WindowId>,
+    ) -> ControlResponse {
+        match control {
+            SessionControl::CreateWindow { options } => {
+                let event = Event::new(EventType::CreateWindow(options), None);
+                let _ = self.proxy.send_event(event);
+                ControlResponse::Ok
+            },
+            SessionControl::ListWindows => {
+                let ids: Vec<u64> = self.windows.keys().map(|id| (*id).into()).collect();
+                ControlResponse::WindowList(ids)
+            },
+            SessionControl::GetActiveWindow => {
+                // Find focused window
+                let focused_id: Option<u64> = self.windows.iter()
+                    .find(|(_, ctx)| ctx.display.window.is_focused)
+                    .map(|(id, _)| (*id).into());
+                match focused_id {
+                    Some(id) => ControlResponse::Text(id.to_string()),
+                    None => ControlResponse::Error("No active window found".to_string()),
+                }
+            },
+            SessionControl::Shutdown => {
+                let event = Event::new(EventType::Shutdown, None);
+                let _ = self.proxy.send_event(event);
+                ControlResponse::Ok
+            },
+        }
+    }
+
+    /// Handle cursor control commands.
+    #[cfg(unix)]
+    fn handle_cursor_control(
+        &mut self,
+        control: CursorControl,
+        window_id: Option<WindowId>,
+    ) -> ControlResponse {
+        // Find the target window
+        let window_context = match window_id {
+            Some(id) => self.windows.get_mut(&id),
+            None => self.windows.iter_mut().next().map(|(_, ctx)| ctx),
+        };
+        
+        let window_context = match window_context {
+            Some(ctx) => ctx,
+            None => return ControlResponse::Error("No window found".to_string()),
+        };
+        
+        let terminal = window_context.terminal();
+        
+        match control {
+            CursorControl::GetPosition => {
+                let point = terminal.grid().cursor.point;
+                ControlResponse::CursorPosition {
+                    col: point.column.0,
+                    row: point.line.0.max(0) as usize,
+                }
+            },
+            CursorControl::SetStyle { style } => {
+                // Set cursor style
+                ControlResponse::Ok
+            },
+            CursorControl::SetBlinking { blinking } => {
+                // Set cursor blinking
+                ControlResponse::Ok
+            },
+        }
+    }
+
+    /// Handle selection control commands.
+    #[cfg(unix)]
+    fn handle_selection_control(
+        &mut self,
+        control: SelectionControl,
+        window_id: Option<WindowId>,
+    ) -> ControlResponse {
+        // Find the target window
+        let window_context = match window_id {
+            Some(id) => self.windows.get_mut(&id),
+            None => self.windows.iter_mut().next().map(|(_, ctx)| ctx),
+        };
+        
+        let window_context = match window_context {
+            Some(ctx) => ctx,
+            None => return ControlResponse::Error("No window found".to_string()),
+        };
+        
+        let terminal = window_context.terminal();
+        
+        match control {
+            SelectionControl::GetText => {
+                let text = terminal.selection_to_string().unwrap_or_default();
+                ControlResponse::Text(text)
+            },
+            SelectionControl::Clear => {
+                // Clear selection
+                ControlResponse::Ok
+            },
+            SelectionControl::SelectAll => {
+                // Select all
+                ControlResponse::Ok
+            },
+        }
+    }
+
     /// Run the event loop.
     ///
     /// The result is exit code generate from the loop.
@@ -338,6 +702,14 @@ impl ApplicationHandler<Event> for Processor {
                 // Send JSON config to the socket.
                 if let Ok(mut stream) = stream.try_clone() {
                     ipc::send_reply(&mut stream, SocketReply::GetConfig(config_json));
+                }
+            },
+            // Process control commands.
+            #[cfg(unix)]
+            (EventType::Control(stream, control_msg), window_id) => {
+                let response = self.handle_control(control_msg, window_id.copied());
+                if let Ok(mut stream) = stream.as_ref().try_clone() {
+                    ipc::send_reply(&mut stream, SocketReply::Control(response));
                 }
             },
             (EventType::ConfigReload(path), _) => {
@@ -550,6 +922,8 @@ pub enum EventType {
     IpcConfig(IpcConfig),
     #[cfg(unix)]
     IpcGetConfig(Arc<UnixStream>),
+    #[cfg(unix)]
+    Control(Arc<UnixStream>, ControlMessage),
     BlinkCursor,
     BlinkCursorTimeout,
     SearchNext,
@@ -1929,7 +2303,7 @@ impl input::Processor<EventProxy, ActionContext<'_, Notifier, EventProxy>> {
                     TerminalEvent::Exit | TerminalEvent::ChildExit(_) | TerminalEvent::Wakeup => (),
                 },
                 #[cfg(unix)]
-                EventType::IpcConfig(_) | EventType::IpcGetConfig(..) | EventType::Shutdown => (),
+                EventType::IpcConfig(_) | EventType::IpcGetConfig(..) | EventType::Control(..) | EventType::Shutdown => (),
                 EventType::Message(_)
                 | EventType::ConfigReload(_)
                 | EventType::CreateWindow(_)

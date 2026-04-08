@@ -113,6 +113,9 @@ pub struct Window {
     /// Hold the window when terminal exits.
     pub hold: bool,
 
+    /// Flag indicating whether the window is currently focused.
+    pub is_focused: bool,
+
     window: WinitWindow,
 
     /// Current window title.
@@ -211,6 +214,7 @@ impl Window {
             mouse_visible: true,
             has_frame: true,
             scale_factor,
+            is_focused: false,
             window,
             is_x11,
             ime_inhibitor: Default::default(),
@@ -393,9 +397,19 @@ impl Window {
         self.set_fullscreen(self.window.fullscreen().is_none());
     }
 
+    /// Check if window is fullscreen.
+    pub fn is_fullscreen(&self) -> bool {
+        self.window.fullscreen().is_some()
+    }
+
     /// Toggle the window's maximized state.
     pub fn toggle_maximized(&self) {
         self.set_maximized(!self.window.is_maximized());
+    }
+
+    /// Check if window is maximized.
+    pub fn is_maximized(&self) -> bool {
+        self.window.is_maximized()
     }
 
     /// Inform windowing system about presenting to the window.

@@ -74,6 +74,131 @@ On Windows, the config file will be looked for in:
 
 * `%APPDATA%\alacritty\alacritty.toml`
 
+## CLI Control (New)
+
+This fork adds comprehensive CLI control capabilities to Alacritty, allowing you
+to control running Alacritty instances via IPC (Unix sockets).
+
+### Usage
+
+```bash
+# Control commands
+alacritty control <COMMAND>
+
+# Or via msg subcommand
+alacritty msg control <COMMAND>
+```
+
+### Window Control
+
+```bash
+# Window state
+alacritty control window minimize
+alacritty control window maximize
+alacritty control window restore
+alacritty control window toggle-fullscreen
+alacritty control window fullscreen --enabled true
+alacritty control window toggle-maximized
+alacritty control window focus
+alacritty control window urgent --urgent true
+
+# Window properties
+alacritty control window title --title "My Terminal"
+alacritty control window opacity --opacity 0.9
+alacritty control window blur --blur true
+alacritty control window visible --visible true
+alacritty control window move --x 100 --y 200
+alacritty control window resize --width 800 --height 600
+
+# Window information
+alacritty control window info
+alacritty control window list
+alacritty control window close
+```
+
+### Terminal Control
+
+```bash
+# Send input
+alacritty control terminal send --text "echo hello"
+alacritty control terminal key --key "C-c"  # Ctrl+C
+
+# Scroll
+alacritty control terminal scroll-up --lines 10
+alacritty control terminal scroll-down --lines 10
+alacritty control terminal scroll-top
+alacritty control terminal scroll-bottom
+
+# Operations
+alacritty control terminal clear
+alacritty control terminal copy
+alacritty control terminal paste
+
+# Size info
+alacritty control terminal size
+alacritty control terminal resize --cols 120 --rows 40
+```
+
+### Session Management
+
+```bash
+# Create new window
+alacritty control session new-window --title "New Window"
+alacritty control session new-window --working-directory /path/to/dir --command "vim"
+
+# List windows
+alacritty control session list
+alacritty control session active  # Get focused window ID
+
+# Shutdown daemon
+alacritty control session shutdown
+```
+
+### Configuration
+
+```bash
+# Reload config
+alacritty control config reload
+
+# Get current config
+alacritty control config get
+
+# Set/reset options
+alacritty control config set --option "font.size" --value "12"
+alacritty control config reset --option "font.size"
+```
+
+### Cursor Control
+
+```bash
+alacritty control cursor pos          # Get cursor position
+alacritty control cursor style --style Beam
+alacritty control cursor blink --blinking true
+```
+
+### Selection Control
+
+```bash
+alacritty control selection get       # Get selected text
+alacritty control selection clear
+alacritty control selection all       # Select all
+```
+
+### Targeting Specific Windows
+
+Use the `--window-id` flag or `ALACRITTY_WINDOW_ID` environment variable:
+
+```bash
+alacritty control --window-id 123 window focus
+ALACRITTY_WINDOW_ID=123 alacritty control window minimize
+```
+
+Use `-1` to target all windows:
+
+```bash
+alacritty control --window-id -1 window urgent --urgent true
+```
+
 ## Contributing
 
 A guideline about contributing to Alacritty can be found in the

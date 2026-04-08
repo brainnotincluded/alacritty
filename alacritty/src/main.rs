@@ -30,6 +30,7 @@ use alacritty_terminal::tty;
 mod cli;
 mod clipboard;
 mod config;
+mod control;
 mod daemon;
 mod display;
 mod event;
@@ -55,10 +56,11 @@ mod gl {
 
 #[cfg(unix)]
 use crate::cli::MessageOptions;
-#[cfg(not(any(target_os = "macos", windows)))]
+#[cfg(unix)]
 use crate::cli::SocketMessage;
-use crate::cli::{Options, Subcommands};
+use crate::cli::{Options, Subcommands, ControlOptions, ControlCommand};
 use crate::config::UiConfig;
+use crate::control::{ControlMessage, WindowControl, TerminalControl, ConfigControl, SessionControl, CursorControl, SelectionControl};
 use crate::config::monitor::ConfigMonitor;
 use crate::event::{Event, Processor};
 #[cfg(target_os = "macos")]
@@ -84,6 +86,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     match options.subcommands {
         #[cfg(unix)]
         Some(Subcommands::Msg(options)) => msg(options)?,
+        #[cfg(unix)]
+        Some(Subcommands::Control(options)) => control_cmd(options)?,
         Some(Subcommands::Migrate(options)) => migrate::migrate(options),
         None => alacritty(options)?,
     }
@@ -101,6 +105,101 @@ fn msg(mut options: MessageOptions) -> Result<(), Box<dyn Error>> {
             env::var("XDG_ACTIVATION_TOKEN").or_else(|_| env::var("DESKTOP_STARTUP_ID")).ok();
     }
     ipc::send_message(options.socket, options.message).map_err(|err| err.into())
+}
+
+/// `control` subcommand entrypoint.
+#[cfg(unix)]
+fn control_cmd(options: ControlOptions) -> Result<(), Box<dyn Error>> {
+    use crate::cli::{WindowCommand, TerminalCommand, ConfigCommand, SessionCommand, CursorCommand, SelectionCommand};
+    
+    // Convert ControlCommand to ControlMessage
+    let control_message = match options.command {
+        ControlCommand::Window(cmd) => {
+            let window_control = match cmd {
+                WindowCommand::Minimize => WindowControl::Minimize,
+                WindowCommand::Maximize => WindowControl::Maximize,
+                WindowCommand::Restore => WindowControl::Restore,
+                WindowCommand::ToggleFullscreen => WindowControl::ToggleFullscreen,
+                WindowCommand::Fullscreen { enabled } => WindowControl::SetFullscreen { enabled },
+                WindowCommand::ToggleMaximized => WindowControl::ToggleMaximized,
+                WindowCommand::Focus => WindowControl::Focus,
+                WindowCommand::Urgent { urgent } => WindowControl::SetUrgent { urgent },
+                WindowCommand::Title { title } => WindowControl::SetTitle { title },
+                WindowCommand::Opacity { opacity } => WindowControl::SetOpacity { opacity },
+                WindowCommand::Blur { blur } => WindowControl::SetBlur { blur },
+                WindowCommand::Visible { visible } => WindowControl::SetVisible { visible },
+                WindowCommand::Move { x, y } => WindowControl::SetPosition { x, y },
+                WindowCommand::Resize { width, height } => WindowControl::SetSize { width, height },
+                WindowCommand::Info => WindowControl::GetInfo,
+                WindowCommand::Close => WindowControl::Close,
+                WindowCommand::List => WindowControl::ListWindows,
+            };
+            ControlMessage::Window(window_control)
+        },
+        ControlCommand::Terminal(cmd) => {
+            let terminal_control = match cmd {
+                TerminalCommand::Send { text } => TerminalControl::SendText { text },
+                TerminalCommand::Key { key } => TerminalControl::SendKey { key, mods: vec![] },
+                TerminalCommand::ScrollUp { lines } => TerminalControl::ScrollUp { lines },
+                TerminalCommand::ScrollDown { lines } => TerminalControl::ScrollDown { lines },
+                TerminalCommand::ScrollTop => TerminalControl::ScrollToTop,
+                TerminalCommand::ScrollBottom => TerminalControl::ScrollToBottom,
+                TerminalCommand::Clear => TerminalControl::Clear,
+                TerminalCommand::Copy => TerminalControl::CopySelection,
+                TerminalCommand::Paste => TerminalControl::Paste,
+                TerminalCommand::Content { start, end } => TerminalControl::GetContent { start, end },
+                TerminalCommand::Size => TerminalControl::GetSize,
+                TerminalCommand::Resize { cols, rows } => TerminalControl::SetSize { cols, rows },
+            };
+            ControlMessage::Terminal(terminal_control)
+        },
+        ControlCommand::Config(cmd) => {
+            let config_control = match cmd {
+                ConfigCommand::Reload => ConfigControl::Reload,
+                ConfigCommand::Get => ConfigControl::GetConfig,
+                ConfigCommand::Set { option, value } => ConfigControl::SetOption { option, value },
+                ConfigCommand::Reset { option } => ConfigControl::ResetOption { option },
+            };
+            ControlMessage::Config(config_control)
+        },
+        ControlCommand::Session(cmd) => {
+            let session_control = match cmd {
+                SessionCommand::NewWindow { working_directory, command, title } => {
+                    let mut opts = crate::cli::WindowOptions::default();
+                    opts.terminal_options.working_directory = working_directory;
+                    if let Some(cmd) = command {
+                        opts.terminal_options.set_command(cmd, vec![]);
+                    }
+                    if let Some(t) = title {
+                        opts.window_identity.title = Some(t);
+                    }
+                    SessionControl::CreateWindow { options: opts }
+                },
+                SessionCommand::List => SessionControl::ListWindows,
+                SessionCommand::Active => SessionControl::GetActiveWindow,
+                SessionCommand::Shutdown => SessionControl::Shutdown,
+            };
+            ControlMessage::Session(session_control)
+        },
+        ControlCommand::Cursor(cmd) => {
+            let cursor_control = match cmd {
+                CursorCommand::Pos => CursorControl::GetPosition,
+                CursorCommand::Style { style } => CursorControl::SetStyle { style },
+                CursorCommand::Blink { blinking } => CursorControl::SetBlinking { blinking },
+            };
+            ControlMessage::Cursor(cursor_control)
+        },
+        ControlCommand::Selection(cmd) => {
+            let selection_control = match cmd {
+                SelectionCommand::Get => SelectionControl::GetText,
+                SelectionCommand::Clear => SelectionControl::Clear,
+                SelectionCommand::All => SelectionControl::SelectAll,
+            };
+            ControlMessage::Selection(selection_control)
+        },
+    };
+    
+    ipc::send_message(options.socket, control_message).map_err(|err| err.into())
 }
 
 /// Temporary files stored for Alacritty.

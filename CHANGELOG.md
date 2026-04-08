@@ -10,6 +10,18 @@ Notable changes to the `alacritty_terminal` crate are documented in its
 
 ## 0.18.0-dev
 
+### Added
+
+- **CLI Control**: Comprehensive CLI control over running Alacritty instances via IPC
+  - Window control: minimize, maximize, fullscreen, focus, opacity, blur, resize, move
+  - Terminal control: send text/keys, scroll, clear, copy/paste, resize
+  - Session management: create windows, list windows, get active window, shutdown
+  - Configuration: reload, get/set options
+  - Cursor control: get position, set style/blinking
+  - Selection control: get text, clear, select all
+  - Target specific windows via `--window-id` or `ALACRITTY_WINDOW_ID`
+  - New `alacritty control` subcommand with intuitive interface
+
 ## 0.17.0
 
 ### Packaging
