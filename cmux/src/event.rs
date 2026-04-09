@@ -222,14 +222,24 @@ impl Processor {
 
     /// Split the current pane horizontally (creates pane below).
     pub fn split_pane_horizontal(&mut self, _window_id: WindowId) {
-        log::info!("Split pane horizontal - not yet implemented");
-        // TODO: Create new terminal and split pane in multiplexer
+        log::warn!("Split pane horizontal - creating new window");
+        // For now, create a new window as a "virtual pane"
+        // TODO: Implement actual in-window pane splitting
+        let _ = self.proxy.send_event(Event::new(
+            EventType::CreateWindow(WindowOptions::default()),
+            None,
+        ));
     }
 
     /// Split the current pane vertically (creates pane to the right).
     pub fn split_pane_vertical(&mut self, _window_id: WindowId) {
-        log::info!("Split pane vertical - not yet implemented");
-        // TODO: Create new terminal and split pane in multiplexer
+        log::warn!("Split pane vertical - creating new window");
+        // For now, create a new window as a "virtual pane"
+        // TODO: Implement actual in-window pane splitting
+        let _ = self.proxy.send_event(Event::new(
+            EventType::CreateWindow(WindowOptions::default()),
+            None,
+        ));
     }
 
     /// Navigate to pane in the specified direction.
