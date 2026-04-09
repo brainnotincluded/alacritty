@@ -31,6 +31,7 @@ use winit::event::{
     Touch as TouchEvent, WindowEvent,
 };
 use winit::keyboard::ModifiersState;
+use winit::platform::modifier_supplement::KeyEventExtModifierSupplement;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, DeviceEvents, EventLoop, EventLoopProxy};
 use winit::raw_window_handle::HasDisplayHandle;
 use winit::window::WindowId;
@@ -784,15 +785,25 @@ impl ApplicationHandler<Event> for Processor {
             #[cfg(not(target_os = "macos"))]
             let is_cmd = mods.control_key();
             
-            // Get the key character from logical_key and normalize to lowercase.
-            // Note: When Command is pressed on macOS, logical_key may still be Character.
-            let key_char: Option<String> = match key_event.logical_key.as_ref() {
-                winit::keyboard::Key::Character(c) => Some(c.to_lowercase()),
-                _ => None,
+            // Get the key character for shortcut matching.
+            // On macOS with Command held, use key_without_modifiers() because the system
+            // may remap keys (e.g., Dvorak-QWERTY layouts remap to QWERTY when Command is held).
+            // See: https://github.com/alacritty/alacritty/issues/7742
+            let key_char: Option<String> = if cfg!(target_os = "macos") && mods.super_key() {
+                // Use key_without_modifiers to get the base key before macOS remapping
+                match key_event.key_without_modifiers().as_ref() {
+                    winit::keyboard::Key::Character(c) => Some(c.to_lowercase()),
+                    _ => None,
+                }
+            } else {
+                match key_event.logical_key.as_ref() {
+                    winit::keyboard::Key::Character(c) => Some(c.to_lowercase()),
+                    _ => None,
+                }
             };
             
-            log::info!("Key debug: char={:?} logical={:?} cmd={} shift={} mods={:?}", 
-                     key_char, key_event.logical_key, is_cmd, mods.shift_key(), mods);
+            log::info!("Key debug: char={:?} logical={:?} without_mods={:?} cmd={} shift={} mods={:?}", 
+                     key_char, key_event.logical_key, key_event.key_without_modifiers(), is_cmd, mods.shift_key(), mods);
             
             // Cmd+B (or Ctrl+B) - Activate prefix mode.
             if is_cmd && key_char.as_deref() == Some("b") && !self.prefix_mode {
