@@ -35,18 +35,8 @@ pub struct Theme {
 
 impl Default for Theme {
     fn default() -> Self {
-        // Dark theme (default)
-        Self {
-            pane_border_active: Rgb::new(88, 166, 255),    // GitHub blue
-            pane_border_inactive: Rgb::new(68, 68, 68),    // Dark gray
-            status_bar_bg: Rgb::new(13, 13, 13),           // Almost black
-            status_bar_fg: Rgb::new(212, 212, 212),        // Light gray
-            tab_bar_bg: Rgb::new(22, 22, 22),              // Dark background
-            tab_active_bg: Rgb::new(45, 45, 45),           // Lighter gray
-            tab_active_fg: Rgb::new(255, 255, 255),        // White
-            tab_inactive_fg: Rgb::new(139, 139, 139),      // Muted gray
-            accent: Rgb::new(88, 166, 255),                // Blue accent
-        }
+        // Default to Warp's iconic dark theme
+        Self::warp_dark()
     }
 }
 
@@ -65,10 +55,88 @@ impl Theme {
             accent: Rgb::new(9, 105, 218),                 // Blue accent
         }
     }
+
+    /// Warp terminal dark theme - the iconic purple-accented dark theme.
+    pub fn warp_dark() -> Self {
+        // Based on Warp terminal's default dark theme
+        // Purple accent (#A172FF), dark blue-gray background (#1A1B26)
+        Self {
+            pane_border_active: Rgb::new(161, 114, 255),   // Warp purple
+            pane_border_inactive: Rgb::new(59, 62, 75),    // Dark gray-blue
+            status_bar_bg: Rgb::new(26, 27, 38),           // Warp background
+            status_bar_fg: Rgb::new(192, 202, 245),        // Light lavender
+            tab_bar_bg: Rgb::new(26, 27, 38),              // Warp background
+            tab_active_bg: Rgb::new(41, 43, 56),           // Lighter blue-gray
+            tab_active_fg: Rgb::new(255, 255, 255),        // White
+            tab_inactive_fg: Rgb::new(130, 136, 165),      // Muted lavender-gray
+            accent: Rgb::new(161, 114, 255),               // Warp purple
+        }
+    }
+
+    /// Warp terminal light theme.
+    pub fn warp_light() -> Self {
+        Self {
+            pane_border_active: Rgb::new(137, 87, 229),    // Warp purple (darker for light)
+            pane_border_inactive: Rgb::new(200, 202, 210), // Light gray
+            status_bar_bg: Rgb::new(250, 250, 252),        // Near white
+            status_bar_fg: Rgb::new(50, 52, 64),           // Dark gray
+            tab_bar_bg: Rgb::new(250, 250, 252),           // Near white
+            tab_active_bg: Rgb::new(255, 255, 255),        // White
+            tab_active_fg: Rgb::new(50, 52, 64),           // Dark gray
+            tab_inactive_fg: Rgb::new(130, 136, 165),      // Muted gray
+            accent: Rgb::new(137, 87, 229),                // Warp purple
+        }
+    }
+}
+
+/// Warp terminal ANSI color palette (16 colors).
+/// These are the colors used by Warp's default theme.
+#[derive(Debug, Clone)]
+pub struct WarpPalette;
+
+impl WarpPalette {
+    /// Warp's dark theme terminal colors
+    pub fn dark() -> [Rgb; 16] {
+        [
+            // Normal colors (0-7)
+            Rgb::new(21, 22, 33),      // Black: #151621
+            Rgb::new(247, 118, 142),   // Red: #F7768E
+            Rgb::new(158, 206, 106),   // Green: #9ECE6A
+            Rgb::new(224, 175, 104),   // Yellow: #E0AF68
+            Rgb::new(122, 162, 247),   // Blue: #7AA2F7
+            Rgb::new(187, 154, 247),   // Magenta: #BB9AF7
+            Rgb::new(125, 207, 255),   // Cyan: #7DCFFF
+            Rgb::new(169, 177, 214),   // White: #A9B1D6
+            // Bright colors (8-15)
+            Rgb::new(65, 72, 104),     // Bright Black: #414868
+            Rgb::new(247, 118, 142),   // Bright Red: #F7768E
+            Rgb::new(158, 206, 106),   // Bright Green: #9ECE6A
+            Rgb::new(224, 175, 104),   // Bright Yellow: #E0AF68
+            Rgb::new(122, 162, 247),   // Bright Blue: #7AA2F7
+            Rgb::new(187, 154, 247),   // Bright Magenta: #BB9AF7
+            Rgb::new(125, 207, 255),   // Bright Cyan: #7DCFFF
+            Rgb::new(192, 202, 245),   // Bright White: #C0CAF5
+        ]
+    }
+
+    /// Warp's purple accent color
+    pub fn accent() -> Rgb {
+        Rgb::new(161, 114, 255) // #A172FF
+    }
+
+    /// Warp's dark background color
+    pub fn background() -> Rgb {
+        Rgb::new(26, 27, 38) // #1A1B26
+    }
+
+    /// Warp's foreground/text color
+    pub fn foreground() -> Rgb {
+        Rgb::new(192, 202, 245) // #C0CAF5
+    }
 }
 
 /// Layout information for a pane.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct PaneInfo {
     /// X position in pixels.
     pub x: f32,
