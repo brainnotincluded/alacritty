@@ -843,6 +843,7 @@ impl ApplicationHandler<Event> for Processor {
             {
                 // Check for character keys with Command modifier
                 if is_cmd {
+
                     match key_char.as_deref() {
                         // Cmd+D - Split vertically (without shift)
                         Some("d") if !mods.shift_key() => {
