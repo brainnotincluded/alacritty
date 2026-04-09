@@ -25,6 +25,8 @@ use log::info;
 #[cfg(windows)]
 use windows_sys::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole, FreeConsole};
 use winit::event_loop::EventLoop;
+#[cfg(target_os = "macos")]
+use winit::platform::macos::{EventLoopBuilderExtMacOS, WindowExtMacOS};
 #[cfg(all(feature = "x11", not(any(target_os = "macos", windows))))]
 use winit::raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
 
@@ -240,6 +242,12 @@ impl Drop for TemporaryFiles {
 /// config change monitor, and runs the main display loop.
 fn alacritty(mut options: Options) -> Result<(), Box<dyn Error>> {
     // Setup winit event loop.
+    // On macOS, disable the default menu bar to prevent it from intercepting keyboard shortcuts.
+    #[cfg(target_os = "macos")]
+    let window_event_loop = EventLoop::<Event>::with_user_event()
+        .with_default_menu(false)
+        .build()?;
+    #[cfg(not(target_os = "macos"))]
     let window_event_loop = EventLoop::<Event>::with_user_event().build()?;
 
     // Initialize the logger as soon as possible as to capture output from other subsystems.
