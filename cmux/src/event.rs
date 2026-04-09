@@ -772,6 +772,10 @@ impl ApplicationHandler<Event> for Processor {
 
         // Handle prefix key mode for cmux tiling commands.
         if let WindowEvent::KeyboardInput { event: key_event, is_synthetic, .. } = &event {
+            // DEBUG: Log ALL keyboard events first
+            log::warn!("RAW KEYBOARD EVENT: key={:?} state={:?} is_synthetic={}", 
+                      key_event.logical_key, key_event.state, is_synthetic);
+            
             if *is_synthetic || key_event.state == ElementState::Released {
                 return;
             }
