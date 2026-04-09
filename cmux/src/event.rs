@@ -759,94 +759,115 @@ impl ApplicationHandler<Event> for Processor {
         }
 
         // Handle prefix key mode for cmux tiling commands.
-        if let WindowEvent::KeyboardInput { event: key_event, .. } = &event {
-            if key_event.state == ElementState::Pressed {
-                let mods = self.windows.get(&window_id).map(|w| w.modifiers().state()).unwrap_or_default();
-                let key_text = key_event.text.as_ref().map(|s| s.as_str()).unwrap_or("");
+        if let WindowEvent::KeyboardInput { event: key_event, is_synthetic, .. } = &event {
+            if *is_synthetic || key_event.state == ElementState::Released {
+                return;
+            }
+            
+            // Get modifiers from the window context.
+            let mods = self.windows.get(&window_id).map(|w| w.modifiers().state()).unwrap_or_default();
+            
+            // Check if Command (macOS) or Control (other) is pressed.
+            #[cfg(target_os = "macos")]
+            let is_cmd = mods.super_key();
+            #[cfg(not(target_os = "macos"))]
+            let is_cmd = mods.control_key();
+            
+            // Get the key character from logical_key.
+            let key_char: Option<&str> = match key_event.logical_key.as_ref() {
+                winit::keyboard::Key::Character(c) => Some(c.as_ref()),
+                _ => None,
+            };
+            
+            log::debug!("Key: char={:?} logical={:?} cmd={} mods={:?}", key_char, key_event.logical_key, is_cmd, mods);
+            
+            // Cmd+B (or Ctrl+B) - Activate prefix mode.
+            if is_cmd && key_char == Some("b") && !self.prefix_mode {
+                self.prefix_mode = true;
+                log::info!("cmux prefix mode activated - press a command key");
+                return;
+            }
+            
+            // If in prefix mode, handle the command key.
+            if self.prefix_mode {
+                self.prefix_mode = false;
+                let key_name = key_char.unwrap_or("").to_lowercase();
                 
-                // Use Command (Super) on macOS, Ctrl on other platforms for prefix.
-                #[cfg(target_os = "macos")]
-                let is_prefix_key = mods.super_key() && key_text == "b";
-                #[cfg(not(target_os = "macos"))]
-                let is_prefix_key = mods.control_key() && key_text == "b";
+                log::info!("Prefix command: '{}'", key_name);
                 
-                // Check for prefix key activation.
-                if is_prefix_key && !self.prefix_mode {
-                    self.prefix_mode = true;
-                    log::info!("cmux prefix mode activated");
+                if !key_name.is_empty() && self.handle_prefix_key(&key_name, window_id) {
                     return;
                 }
+            }
+            
+            // Direct shortcuts (no prefix needed) - Mac friendly.
+            #[cfg(target_os = "macos")]
+            {
+                let is_cmd_shift = is_cmd && mods.shift_key();
                 
-                // If in prefix mode, handle the command key.
-                if self.prefix_mode {
-                    self.prefix_mode = false;
-                    let key_name = if key_text.is_empty() {
-                        format!("{:?}", key_event.logical_key)
-                    } else {
-                        key_text.to_string()
-                    };
-                    
-                    if self.handle_prefix_key(&key_name, window_id) {
-                        return;
-                    }
+                // Cmd+D - Split vertically
+                if is_cmd && !mods.shift_key() && key_char == Some("d") {
+                    log::info!("Cmd+D: Split vertical");
+                    self.split_pane_vertical(window_id);
+                    return;
                 }
-                
-                // Direct shortcuts (no prefix needed) - Mac friendly.
-                #[cfg(target_os = "macos")]
-                {
-                    // Cmd+D - Split vertically
-                    if mods.super_key() && key_text == "d" {
-                        self.split_pane_vertical(window_id);
-                        return;
-                    }
-                    // Cmd+Shift+D - Split horizontally
-                    if mods.super_key() && mods.shift_key() && key_text == "D" {
-                        self.split_pane_horizontal(window_id);
-                        return;
-                    }
-                    // Cmd+W - Close pane
-                    if mods.super_key() && key_text == "w" {
-                        self.close_pane(window_id);
-                        return;
-                    }
-                    // Cmd+T - New window
-                    if mods.super_key() && key_text == "t" {
-                        let _ = self.proxy.send_event(Event::new(EventType::CreateWindow(WindowOptions::default()), None));
-                        return;
-                    }
-                    // Cmd+[/] - Navigate windows
-                    if mods.super_key() && key_text == "[" {
-                        self.multiplexer.previous_window();
-                        return;
-                    }
-                    if mods.super_key() && key_text == "]" {
-                        self.multiplexer.next_window();
-                        return;
-                    }
-                    // Cmd+{arrow} - Navigate panes
-                    if mods.super_key() && !mods.shift_key() {
-                        let handled = match key_event.logical_key.as_ref() {
-                            winit::keyboard::Key::Named(winit::keyboard::NamedKey::ArrowUp) => {
-                                self.navigate_pane(window_id, PaneDirection::Up);
-                                true
-                            }
-                            winit::keyboard::Key::Named(winit::keyboard::NamedKey::ArrowDown) => {
-                                self.navigate_pane(window_id, PaneDirection::Down);
-                                true
-                            }
-                            winit::keyboard::Key::Named(winit::keyboard::NamedKey::ArrowLeft) => {
-                                self.navigate_pane(window_id, PaneDirection::Left);
-                                true
-                            }
-                            winit::keyboard::Key::Named(winit::keyboard::NamedKey::ArrowRight) => {
-                                self.navigate_pane(window_id, PaneDirection::Right);
-                                true
-                            }
-                            _ => false,
-                        };
-                        if handled {
-                            return;
+                // Cmd+Shift+D - Split horizontally
+                if is_cmd_shift && key_char == Some("D") {
+                    log::info!("Cmd+Shift+D: Split horizontal");
+                    self.split_pane_horizontal(window_id);
+                    return;
+                }
+                // Cmd+W - Close pane
+                if is_cmd && !mods.shift_key() && key_char == Some("w") {
+                    log::info!("Cmd+W: Close pane");
+                    self.close_pane(window_id);
+                    return;
+                }
+                // Cmd+T - New window
+                if is_cmd && !mods.shift_key() && key_char == Some("t") {
+                    log::info!("Cmd+T: New window");
+                    let _ = self.proxy.send_event(Event::new(EventType::CreateWindow(WindowOptions::default()), None));
+                    return;
+                }
+                // Cmd+[ - Previous window
+                if is_cmd && key_char == Some("[") {
+                    log::info!("Cmd+[: Previous window");
+                    self.multiplexer.previous_window();
+                    return;
+                }
+                // Cmd+] - Next window
+                if is_cmd && key_char == Some("]") {
+                    log::info!("Cmd+]: Next window");
+                    self.multiplexer.next_window();
+                    return;
+                }
+                // Cmd+Arrow - Navigate panes
+                if is_cmd && !mods.shift_key() {
+                    let handled = match key_event.logical_key.as_ref() {
+                        winit::keyboard::Key::Named(winit::keyboard::NamedKey::ArrowUp) => {
+                            log::info!("Cmd+Up: Navigate up");
+                            self.navigate_pane(window_id, PaneDirection::Up);
+                            true
                         }
+                        winit::keyboard::Key::Named(winit::keyboard::NamedKey::ArrowDown) => {
+                            log::info!("Cmd+Down: Navigate down");
+                            self.navigate_pane(window_id, PaneDirection::Down);
+                            true
+                        }
+                        winit::keyboard::Key::Named(winit::keyboard::NamedKey::ArrowLeft) => {
+                            log::info!("Cmd+Left: Navigate left");
+                            self.navigate_pane(window_id, PaneDirection::Left);
+                            true
+                        }
+                        winit::keyboard::Key::Named(winit::keyboard::NamedKey::ArrowRight) => {
+                            log::info!("Cmd+Right: Navigate right");
+                            self.navigate_pane(window_id, PaneDirection::Right);
+                            true
+                        }
+                        _ => false,
+                    };
+                    if handled {
+                        return;
                     }
                 }
             }
