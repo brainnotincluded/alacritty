@@ -312,18 +312,21 @@ impl Processor {
             }
             // Show help
             "?" => {
-                log::info!("cmux prefix key commands:\n\
-                    % - Split vertically\n\
-                    \" - Split horizontally\n\
-                    Arrow keys/hjkl - Navigate panes\n\
-                    x - Close pane\n\
-                    c - Create new window\n\
-                    n - Next window\n\
-                    p - Previous window\n\
-                    , - Rename window\n\
-                    d - Detach session\n\
-                    s - List sessions\n\
-                    ? - Show help");
+                #[cfg(target_os = "macos")]
+                log::info!("cmux Mac shortcuts:\n\
+                    Cmd+B then: % - Split vertically | \" - Split horizontally\n\
+                    Cmd+B then: hjkl/arrow - Navigate panes | x - Close pane\n\
+                    Cmd+B then: c - New window | n/p - Next/prev window | d - Detach\n\
+                    \n\
+                    Direct shortcuts (no prefix):\n\
+                    Cmd+D - Split vertical | Cmd+Shift+D - Split horizontal\n\
+                    Cmd+W - Close pane | Cmd+T - New window\n\
+                    Cmd+[ / ] - Prev/next window | Cmd+Arrow - Navigate panes");
+                #[cfg(not(target_os = "macos"))]
+                log::info!("cmux Linux/Windows shortcuts:\n\
+                    Ctrl+B then: % - Split vertically | \" - Split horizontally\n\
+                    Ctrl+B then: hjkl/arrow - Navigate panes | x - Close pane\n\
+                    Ctrl+B then: c - New window | n/p - Next/prev window | d - Detach");
                 true
             }
             _ => false,
@@ -761,8 +764,14 @@ impl ApplicationHandler<Event> for Processor {
                 let mods = self.windows.get(&window_id).map(|w| w.modifiers().state()).unwrap_or_default();
                 let key_text = key_event.text.as_ref().map(|s| s.as_str()).unwrap_or("");
                 
-                // Check for Ctrl-b prefix key.
-                if mods.control_key() && key_text == "b" && !self.prefix_mode {
+                // Use Command (Super) on macOS, Ctrl on other platforms for prefix.
+                #[cfg(target_os = "macos")]
+                let is_prefix_key = mods.super_key() && key_text == "b";
+                #[cfg(not(target_os = "macos"))]
+                let is_prefix_key = mods.control_key() && key_text == "b";
+                
+                // Check for prefix key activation.
+                if is_prefix_key && !self.prefix_mode {
                     self.prefix_mode = true;
                     log::info!("cmux prefix mode activated");
                     return;
@@ -779,6 +788,65 @@ impl ApplicationHandler<Event> for Processor {
                     
                     if self.handle_prefix_key(&key_name, window_id) {
                         return;
+                    }
+                }
+                
+                // Direct shortcuts (no prefix needed) - Mac friendly.
+                #[cfg(target_os = "macos")]
+                {
+                    // Cmd+D - Split vertically
+                    if mods.super_key() && key_text == "d" {
+                        self.split_pane_vertical(window_id);
+                        return;
+                    }
+                    // Cmd+Shift+D - Split horizontally
+                    if mods.super_key() && mods.shift_key() && key_text == "D" {
+                        self.split_pane_horizontal(window_id);
+                        return;
+                    }
+                    // Cmd+W - Close pane
+                    if mods.super_key() && key_text == "w" {
+                        self.close_pane(window_id);
+                        return;
+                    }
+                    // Cmd+T - New window
+                    if mods.super_key() && key_text == "t" {
+                        let _ = self.proxy.send_event(Event::new(EventType::CreateWindow(WindowOptions::default()), None));
+                        return;
+                    }
+                    // Cmd+[/] - Navigate windows
+                    if mods.super_key() && key_text == "[" {
+                        self.multiplexer.previous_window();
+                        return;
+                    }
+                    if mods.super_key() && key_text == "]" {
+                        self.multiplexer.next_window();
+                        return;
+                    }
+                    // Cmd+{arrow} - Navigate panes
+                    if mods.super_key() && !mods.shift_key() {
+                        let handled = match key_event.logical_key.as_ref() {
+                            winit::keyboard::Key::Named(winit::keyboard::NamedKey::ArrowUp) => {
+                                self.navigate_pane(window_id, PaneDirection::Up);
+                                true
+                            }
+                            winit::keyboard::Key::Named(winit::keyboard::NamedKey::ArrowDown) => {
+                                self.navigate_pane(window_id, PaneDirection::Down);
+                                true
+                            }
+                            winit::keyboard::Key::Named(winit::keyboard::NamedKey::ArrowLeft) => {
+                                self.navigate_pane(window_id, PaneDirection::Left);
+                                true
+                            }
+                            winit::keyboard::Key::Named(winit::keyboard::NamedKey::ArrowRight) => {
+                                self.navigate_pane(window_id, PaneDirection::Right);
+                                true
+                            }
+                            _ => false,
+                        };
+                        if handled {
+                            return;
+                        }
                     }
                 }
             }
