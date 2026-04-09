@@ -1,9 +1,9 @@
 [workspace]
 members = [
-    "alacritty",
-    "alacritty_terminal",
-    "alacritty_config",
-    "alacritty_config_derive",
+    "cmux",
+    "cmux_terminal",
+    "cmux_config",
+    "cmux_config_derive",
 ]
 resolver = "2"
 

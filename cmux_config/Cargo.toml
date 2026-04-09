@@ -1,0 +1,19 @@
+[package]
+name = "cmux_config"
+version = "0.1.0-dev"
+authors = ["Christian Duerr <contact@christianduerr.com>"]
+license = "MIT OR Apache-2.0"
+description = "Configuration abstractions for cmux"
+homepage = "https://github.com/brainnotincluded/cmux"
+repository = "https://github.com/brainnotincluded/cmux"
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+log = { version = "0.4.17", features = ["serde"] }
+serde = "1.0.163"
+toml.workspace = true
+
+[dev-dependencies]
+cmux_config_derive = { version = "0.1.0-dev", path = "../cmux_config_derive" }
+serde = { version = "1.0.163", features = ["derive"] }

@@ -1,239 +1,295 @@
 <p align="center">
-    <img width="200" alt="Alacritty Logo" src="https://raw.githubusercontent.com/alacritty/alacritty/master/extra/logo/compat/alacritty-term%2Bscanlines.png">
+    <img width="200" alt="cmux Logo" src="https://raw.githubusercontent.com/brainnotincluded/cmux/main/extra/logo/cmux-term.png">
 </p>
 
-<h1 align="center">Alacritty - A fast, cross-platform, OpenGL terminal emulator</h1>
+<h1 align="center">cmux - A GPU-Accelerated Terminal Multiplexer</h1>
 
 <p align="center">
-  <img alt="Alacritty - A fast, cross-platform, OpenGL terminal emulator"
-       src="https://raw.githubusercontent.com/alacritty/alacritty/master/extra/promo/alacritty-readme.png">
+  <strong>Built on Alacritty's blazing-fast GPU rendering engine</strong>
+</p>
+
+<p align="center">
+  <a href="#features">Features</a> •
+  <a href="#installation">Installation</a> •
+  <a href="#quick-start">Quick Start</a> •
+  <a href="#configuration">Configuration</a> •
+  <a href="#commands">Commands</a>
 </p>
 
 ## About
 
-Alacritty is a modern terminal emulator that comes with sensible defaults, but
-allows for extensive [configuration](#configuration). By integrating with other
-applications, rather than reimplementing their functionality, it manages to
-provide a flexible set of [features](./docs/features.md) with high performance.
-The supported platforms currently consist of BSD, Linux, macOS and Windows.
+**cmux** is a modern terminal multiplexer that combines Alacritty's GPU-accelerated rendering with the session management capabilities of tmux. It provides:
 
-The software is considered to be at a **beta** level of readiness; there are
-a few missing features and bugs to be fixed, but it is already used by many as
-a daily driver.
-
-Precompiled binaries are available from the [GitHub releases page](https://github.com/alacritty/alacritty/releases).
-
-Join [`#alacritty`] on libera.chat if you have questions or looking for a quick help.
-
-[`#alacritty`]: https://web.libera.chat/gamja/?channels=#alacritty
+- **Pane Management**: Split windows horizontally and vertically
+- **Session Persistence**: Detach and re-attach to sessions
+- **Window Management**: Multiple windows per session with easy navigation
+- **GPU Acceleration**: Lightning-fast rendering using OpenGL
+- **CLI Control**: Comprehensive IPC for scripting and automation
+- **Cross-Platform**: Works on Linux, macOS, BSD, and Windows
 
 ## Features
 
-You can find an overview over the features available in Alacritty [here](./docs/features.md).
+### Terminal Multiplexing
+- Horizontal and vertical splits (`Ctrl-b %`, `Ctrl-b "`)
+- Pane navigation (`Ctrl-b` + arrow keys)
+- Pane resizing (`Ctrl-b` + `Ctrl-`arrow)
+- Active pane highlighting with customizable borders
 
-## Further information
+### Session Management
+- Named sessions (`cmux new -s mysession`)
+- Session listing (`cmux list-sessions`)
+- Attach/detach (`cmux attach -t mysession`)
+- Session persistence across disconnections
 
-- [Announcing Alacritty, a GPU-Accelerated Terminal Emulator](https://jwilm.io/blog/announcing-alacritty/) January 6, 2017
-- [A talk about Alacritty at the Rust Meetup January 2017](https://www.youtube.com/watch?v=qHOdYO3WUTk) January 19, 2017
-- [Alacritty Lands Scrollback, Publishes Benchmarks](https://jwilm.io/blog/alacritty-lands-scrollback/) September 17, 2018
+### Window Management
+- Multiple windows per session (`Ctrl-b c`)
+- Window status bar with indicators
+- Window renaming (`Ctrl-b ,`)
+- Window navigation (`Ctrl-b n`/`p`/`0-9`)
+
+### IPC Control
+- Full CLI control over running instances
+- Create windows, send input, control panes remotely
+- Perfect for automation and scripting
 
 ## Installation
 
-Alacritty can be installed by using various package managers on Linux, BSD,
-macOS and Windows.
+### Prerequisites
 
-Prebuilt binaries for macOS and Windows can also be downloaded from the
-[GitHub releases page](https://github.com/alacritty/alacritty/releases).
+- Rust 1.85.0 or later
+- OpenGL ES 2.0 or higher
+- On Windows: ConPTY support (Windows 10 version 1809+)
 
-For everyone else, the detailed instructions to install Alacritty can be found
-[here](INSTALL.md).
+### From Source
 
-### Requirements
+```bash
+git clone https://github.com/brainnotincluded/cmux.git
+cd cmux
+cargo build --release
+sudo cp target/release/cmux /usr/local/bin/
+```
 
-- At least OpenGL ES 2.0
-- [Windows] ConPTY support (Windows 10 version 1809 or higher)
+### Prebuilt Binaries
+
+Check the [releases page](https://github.com/brainnotincluded/cmux/releases) for prebuilt binaries.
+
+## Quick Start
+
+```bash
+# Start a new session
+cmux
+
+# Start a named session
+cmux new -s myproject
+
+# List running sessions
+cmux list-sessions
+
+# Attach to an existing session
+cmux attach -t myproject
+
+# Start in daemon mode (headless)
+cmux --daemon
+```
+
+### Key Bindings (Default Prefix: `Ctrl-b`)
+
+| Key | Action |
+|-----|--------|
+| `Ctrl-b %` | Split vertically |
+| `Ctrl-b "` | Split horizontally |
+| `Ctrl-b` + arrow | Navigate panes |
+| `Ctrl-b c` | Create new window |
+| `Ctrl-b n` | Next window |
+| `Ctrl-b p` | Previous window |
+| `Ctrl-b 0-9` | Go to window |
+| `Ctrl-b ,` | Rename window |
+| `Ctrl-b d` | Detach session |
+| `Ctrl-b ?` | Show all key bindings |
 
 ## Configuration
 
-You can find the documentation for Alacritty's configuration in `man 5
-alacritty`, or by looking at [the website] if you do not have the manpages
-installed.
+Configuration file locations (in order of precedence):
 
-[the website]: https://alacritty.org/config-alacritty.html
+1. `$XDG_CONFIG_HOME/cmux/cmux.toml`
+2. `$XDG_CONFIG_HOME/cmux.toml`
+3. `$HOME/.config/cmux/cmux.toml`
+4. `$HOME/.cmux.toml`
+5. `/etc/cmux/cmux.toml`
 
-Alacritty doesn't create the config file for you, but it looks for one in the
-following locations:
+On Windows: `%APPDATA%\cmux\cmux.toml`
 
-1. `$XDG_CONFIG_HOME/alacritty/alacritty.toml`
-2. `$XDG_CONFIG_HOME/alacritty.toml`
-3. `$HOME/.config/alacritty/alacritty.toml`
-4. `$HOME/.alacritty.toml`
-5. `/etc/alacritty/alacritty.toml`
+### Example Configuration
 
-On Windows, the config file will be looked for in:
+```toml
+# cmux.toml
 
-* `%APPDATA%\alacritty\alacritty.toml`
+# Session settings
+[session]
+# Automatically save and restore sessions
+auto_save = true
+# Default session name
+default_name = "main"
 
-## CLI Control (New)
+# Pane styling
+[panes]
+# Pane border style: "single", "double", "heavy", "simple", "none"
+border_style = "single"
+# Active pane border color
+active_border_color = "#ffaa00"
+# Inactive pane border color
+inactive_border_color = "#444444"
+# Pane indicator position: "corner", "center", "off"
+indicator_position = "corner"
 
-This fork adds comprehensive CLI control capabilities to Alacritty, allowing you
-to control running Alacritty instances via IPC (Unix sockets).
+# Status bar
+[status_bar]
+# Position: "top", "bottom", "off"
+position = "bottom"
+# Update interval in seconds
+interval = 1
+# Left side format
+format_left = " #S "  # Session name
+# Right side format
+format_right = " %H:%M %d-%b-%y "
+# Center format (window list)
+format_center = " #W "
 
-### Usage
+# Key bindings (prefix is Ctrl-b by default)
+[key_bindings]
+# Change prefix key
+# prefix = "C-a"
 
-```bash
-# Control commands
-alacritty control <COMMAND>
+# Custom key bindings
+[[key_bindings.bind]]
+key = "C-t"
+command = "new-window"
 
-# Or via msg subcommand
-alacritty msg control <COMMAND>
+[[key_bindings.bind]]
+key = "C-s"
+command = "split-window -v"
 ```
 
-### Window Control
+## Commands
+
+### Session Commands
 
 ```bash
-# Window state
-alacritty control window minimize
-alacritty control window maximize
-alacritty control window restore
-alacritty control window toggle-fullscreen
-alacritty control window fullscreen --enabled true
-alacritty control window toggle-maximized
-alacritty control window focus
-alacritty control window urgent --urgent true
+# Create new session
+cmux new-session -s name
+cmux new -s name
 
-# Window properties
-alacritty control window title --title "My Terminal"
-alacritty control window opacity --opacity 0.9
-alacritty control window blur --blur true
-alacritty control window visible --visible true
-alacritty control window move --x 100 --y 200
-alacritty control window resize --width 800 --height 600
+# List sessions
+cmux list-sessions
+cmux ls
 
-# Window information
-alacritty control window info
-alacritty control window list
-alacritty control window close
+# Attach to session
+cmux attach-session -t name
+cmux attach -t name
+
+# Kill session
+cmux kill-session -t name
+
+# Rename session
+cmux rename-session -t old_name new_name
+```
+
+### Window Commands
+
+```bash
+# Create window
+cmux control session new-window --title "Window Name"
+
+# List windows
+cmux control session list
+
+# Select window
+cmux control window select --window-id <id>
+
+# Rename window
+cmux control window title --title "New Name"
+```
+
+### Pane Commands
+
+```bash
+# Split pane horizontally
+cmux control pane split --direction horizontal
+
+# Split pane vertically  
+cmux control pane split --direction vertical
+
+# Navigate to pane
+cmux control pane select --direction up|down|left|right
+
+# Resize pane
+cmux control pane resize --direction right --amount 5
+
+# Close pane
+cmux control pane close
 ```
 
 ### Terminal Control
 
 ```bash
-# Send input
-alacritty control terminal send --text "echo hello"
-alacritty control terminal key --key "C-c"  # Ctrl+C
+# Send text to terminal
+cmux control terminal send --text "echo hello"
+
+# Send key sequence
+cmux control terminal key --key "C-c"
 
 # Scroll
-alacritty control terminal scroll-up --lines 10
-alacritty control terminal scroll-down --lines 10
-alacritty control terminal scroll-top
-alacritty control terminal scroll-bottom
-
-# Operations
-alacritty control terminal clear
-alacritty control terminal copy
-alacritty control terminal paste
-
-# Size info
-alacritty control terminal size
-alacritty control terminal resize --cols 120 --rows 40
+cmux control terminal scroll-up --lines 10
 ```
 
-### Session Management
+## Architecture
 
-```bash
-# Create new window
-alacritty control session new-window --title "New Window"
-alacritty control session new-window --working-directory /path/to/dir --command "vim"
+cmux is built on Alacritty's proven terminal emulation core with added multiplexer capabilities:
 
-# List windows
-alacritty control session list
-alacritty control session active  # Get focused window ID
-
-# Shutdown daemon
-alacritty control session shutdown
+```
+┌─────────────────────────────────────┐
+│            cmux (GUI)               │
+│  ┌─────────────────────────────┐   │
+│  │    Window Manager           │   │
+│  │  ┌─────┐ ┌─────┐ ┌─────┐   │   │
+│  │  │Pane │ │Pane │ │Pane │   │   │
+│  │  │  1  │ │  2  │ │  3  │   │   │
+│  │  └──┬──┘ └──┬──┘ └──┬──┘   │   │
+│  └─────┼───────┼───────┼──────┘   │
+│        │       │       │          │
+│  ┌─────┴───────┴───────┴──────┐   │
+│  │   Session Manager          │   │
+│  └────────────────────────────┘   │
+└─────────────────────────────────────┘
+            │
+┌───────────┴─────────────────────────┐
+│      cmux_terminal (Library)        │
+│   - Terminal emulation (VTE)        │
+│   - PTY management                  │
+│   - Scrollback buffer               │
+└─────────────────────────────────────┘
 ```
 
-### Configuration
+## Differences from tmux
 
-```bash
-# Reload config
-alacritty control config reload
-
-# Get current config
-alacritty control config get
-
-# Set/reset options
-alacritty control config set --option "font.size" --value "12"
-alacritty control config reset --option "font.size"
-```
-
-### Cursor Control
-
-```bash
-alacritty control cursor pos          # Get cursor position
-alacritty control cursor style --style Beam
-alacritty control cursor blink --blinking true
-```
-
-### Selection Control
-
-```bash
-alacritty control selection get       # Get selected text
-alacritty control selection clear
-alacritty control selection all       # Select all
-```
-
-### Targeting Specific Windows
-
-Use the `--window-id` flag or `ALACRITTY_WINDOW_ID` environment variable:
-
-```bash
-alacritty control --window-id 123 window focus
-ALACRITTY_WINDOW_ID=123 alacritty control window minimize
-```
-
-Use `-1` to target all windows:
-
-```bash
-alacritty control --window-id -1 window urgent --urgent true
-```
+| Feature | cmux | tmux |
+|---------|------|------|
+| Rendering | GPU-accelerated | CPU-based |
+| Configuration | TOML | Custom syntax |
+| IPC | Native CLI + socket | tmux command |
+| True Color | Native | Requires config |
+| Unicode | Full support | Full support |
+| Performance | ~60fps rendering | Limited by terminal |
 
 ## Contributing
 
-A guideline about contributing to Alacritty can be found in the
-[`CONTRIBUTING.md`](CONTRIBUTING.md) file.
-
-## FAQ
-
-**_Is it really the fastest terminal emulator?_**
-
-Benchmarking terminal emulators is complicated. Alacritty uses
-[vtebench](https://github.com/alacritty/vtebench) to quantify terminal emulator
-throughput and manages to consistently score better than the competition using
-it. If you have found an example where this is not the case, please report a
-bug.
-
-Other aspects like latency or framerate and frame consistency are more difficult
-to quantify. Some terminal emulators also intentionally slow down to save
-resources, which might be preferred by some users.
-
-If you have doubts about Alacritty's performance or usability, the best way to
-quantify terminal emulators is always to test them with **your** specific
-usecases.
-
-**_Why isn't feature X implemented?_**
-
-Alacritty has many great features, but not every feature from every other
-terminal. This could be for a number of reasons, but sometimes it's just not a
-good fit for Alacritty. This means you won't find things like tabs or splits
-(which are best left to a window manager or [terminal multiplexer][tmux]) nor
-niceties like a GUI config editor.
-
-[tmux]: https://github.com/tmux/tmux
+Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) for details.
 
 ## License
 
-Alacritty is released under the [Apache License, Version 2.0].
+cmux is released under the [Apache License, Version 2.0](LICENSE-APACHE).
 
-[Apache License, Version 2.0]: https://github.com/alacritty/alacritty/blob/master/LICENSE-APACHE
+## Acknowledgments
+
+- Built on [Alacritty](https://github.com/alacritty/alacritty)'s excellent terminal emulation core
+- Inspired by [tmux](https://github.com/tmux/tmux) for session management concepts
