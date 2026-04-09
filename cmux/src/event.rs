@@ -784,16 +784,18 @@ impl ApplicationHandler<Event> for Processor {
             #[cfg(not(target_os = "macos"))]
             let is_cmd = mods.control_key();
             
-            // Get the key character from logical_key.
-            let key_char: Option<&str> = match key_event.logical_key.as_ref() {
-                winit::keyboard::Key::Character(c) => Some(c.as_ref()),
+            // Get the key character from logical_key and normalize to lowercase.
+            // Note: When Command is pressed on macOS, logical_key may still be Character.
+            let key_char: Option<String> = match key_event.logical_key.as_ref() {
+                winit::keyboard::Key::Character(c) => Some(c.to_lowercase()),
                 _ => None,
             };
             
-            log::debug!("Key: char={:?} logical={:?} cmd={} mods={:?}", key_char, key_event.logical_key, is_cmd, mods);
+            log::info!("Key debug: char={:?} logical={:?} cmd={} shift={} mods={:?}", 
+                     key_char, key_event.logical_key, is_cmd, mods.shift_key(), mods);
             
             // Cmd+B (or Ctrl+B) - Activate prefix mode.
-            if is_cmd && key_char == Some("b") && !self.prefix_mode {
+            if is_cmd && key_char.as_deref() == Some("b") && !self.prefix_mode {
                 self.prefix_mode = true;
                 log::info!("cmux prefix mode activated - press a command key");
                 return;
@@ -802,7 +804,7 @@ impl ApplicationHandler<Event> for Processor {
             // If in prefix mode, handle the command key.
             if self.prefix_mode {
                 self.prefix_mode = false;
-                let key_name = key_char.unwrap_or("").to_lowercase();
+                let key_name = key_char.clone().unwrap_or_default();
                 
                 log::info!("Prefix command: '{}'", key_name);
                 
@@ -814,43 +816,47 @@ impl ApplicationHandler<Event> for Processor {
             // Direct shortcuts (no prefix needed) - Mac friendly.
             #[cfg(target_os = "macos")]
             {
-                let is_cmd_shift = is_cmd && mods.shift_key();
-                
-                // Cmd+D - Split vertically
-                if is_cmd && !mods.shift_key() && key_char == Some("d") {
-                    log::info!("Cmd+D: Split vertical");
-                    self.split_pane_vertical(window_id);
-                    return;
-                }
-                // Cmd+Shift+D - Split horizontally
-                if is_cmd_shift && key_char == Some("D") {
-                    log::info!("Cmd+Shift+D: Split horizontal");
-                    self.split_pane_horizontal(window_id);
-                    return;
-                }
-                // Cmd+W - Close pane
-                if is_cmd && !mods.shift_key() && key_char == Some("w") {
-                    log::info!("Cmd+W: Close pane");
-                    self.close_pane(window_id);
-                    return;
-                }
-                // Cmd+T - New window
-                if is_cmd && !mods.shift_key() && key_char == Some("t") {
-                    log::info!("Cmd+T: New window");
-                    let _ = self.proxy.send_event(Event::new(EventType::CreateWindow(WindowOptions::default()), None));
-                    return;
-                }
-                // Cmd+[ - Previous window
-                if is_cmd && key_char == Some("[") {
-                    log::info!("Cmd+[: Previous window");
-                    self.multiplexer.previous_window();
-                    return;
-                }
-                // Cmd+] - Next window
-                if is_cmd && key_char == Some("]") {
-                    log::info!("Cmd+]: Next window");
-                    self.multiplexer.next_window();
-                    return;
+                // Check for character keys with Command modifier
+                if is_cmd {
+                    match key_char.as_deref() {
+                        // Cmd+D - Split vertically (without shift)
+                        Some("d") if !mods.shift_key() => {
+                            log::info!("Cmd+D: Split vertical");
+                            self.split_pane_vertical(window_id);
+                            return;
+                        }
+                        // Cmd+Shift+D - Split horizontally (with shift)
+                        Some("d") if mods.shift_key() => {
+                            log::info!("Cmd+Shift+D: Split horizontal");
+                            self.split_pane_horizontal(window_id);
+                            return;
+                        }
+                        // Cmd+W - Close pane
+                        Some("w") => {
+                            log::info!("Cmd+W: Close pane");
+                            self.close_pane(window_id);
+                            return;
+                        }
+                        // Cmd+T - New window
+                        Some("t") => {
+                            log::info!("Cmd+T: New window");
+                            let _ = self.proxy.send_event(Event::new(EventType::CreateWindow(WindowOptions::default()), None));
+                            return;
+                        }
+                        // Cmd+[ - Previous window
+                        Some("[") => {
+                            log::info!("Cmd+[: Previous window");
+                            self.multiplexer.previous_window();
+                            return;
+                        }
+                        // Cmd+] - Next window
+                        Some("]") => {
+                            log::info!("Cmd+]: Next window");
+                            self.multiplexer.next_window();
+                            return;
+                        }
+                        _ => {}
+                    }
                 }
                 // Cmd+Arrow - Navigate panes
                 if is_cmd && !mods.shift_key() {
