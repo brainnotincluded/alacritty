@@ -30,6 +30,7 @@ use winit::event::{
     ElementState, Event as WinitEvent, Ime, Modifiers, MouseButton, StartCause,
     Touch as TouchEvent, WindowEvent,
 };
+use winit::keyboard::ModifiersState;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, DeviceEvents, EventLoop, EventLoopProxy};
 use winit::raw_window_handle::HasDisplayHandle;
 use winit::window::WindowId;
@@ -106,6 +107,8 @@ pub struct Processor {
     multiplexer: Multiplexer,
     /// Prefix key mode for tmux-style bindings.
     prefix_mode: bool,
+    /// Current keyboard modifiers state.
+    modifiers: ModifiersState,
 }
 
 impl Processor {
@@ -158,6 +161,7 @@ impl Processor {
             config_monitor,
             multiplexer,
             prefix_mode: false,
+            modifiers: ModifiersState::empty(),
         }
     }
 
@@ -758,14 +762,21 @@ impl ApplicationHandler<Event> for Processor {
             info!(target: LOG_TARGET_WINIT, "{event:?}");
         }
 
+        // Track modifier state changes.
+        if let WindowEvent::ModifiersChanged(modifiers) = &event {
+            self.modifiers = modifiers.state();
+            log::debug!("Modifiers changed: {:?}", self.modifiers);
+            return;
+        }
+
         // Handle prefix key mode for cmux tiling commands.
         if let WindowEvent::KeyboardInput { event: key_event, is_synthetic, .. } = &event {
             if *is_synthetic || key_event.state == ElementState::Released {
                 return;
             }
             
-            // Get modifiers from the window context.
-            let mods = self.windows.get(&window_id).map(|w| w.modifiers().state()).unwrap_or_default();
+            // Use the Processor's tracked modifiers (updated by ModifiersChanged events).
+            let mods = self.modifiers;
             
             // Check if Command (macOS) or Control (other) is pressed.
             #[cfg(target_os = "macos")]
