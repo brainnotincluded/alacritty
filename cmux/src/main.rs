@@ -1,6 +1,7 @@
-//! cmux - A GPU-Accelerated Terminal Multiplexer
+//! cmux - A Tiling Terminal Manager
 //!
-//! Built on Alacritty's GPU rendering engine with tmux-like session management.
+//! A GPU-accelerated terminal multiplexer with automatic tmux-style session management.
+//! Built on Alacritty's rendering engine.
 
 #![warn(rust_2018_idioms, future_incompatible)]
 #![deny(clippy::all, clippy::if_not_else, clippy::enum_glob_use)]

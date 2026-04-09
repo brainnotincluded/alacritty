@@ -63,7 +63,10 @@ use crate::logging::{LOG_TARGET_CONFIG, LOG_TARGET_WINIT};
 use crate::message_bar::{Message, MessageBuffer};
 #[cfg(unix)]
 use crate::polling::ipc::{self, SocketReply};
+use crate::multiplexer::Multiplexer;
+use crate::pane::{SplitDirection, PaneId, Direction as PaneDirection};
 use crate::scheduler::{Scheduler, TimerId, Topic};
+use crate::session::SessionWindowId;
 use crate::window_context::WindowContext;
 
 /// Duration after the last user input until an unlimited search is performed.
@@ -99,6 +102,10 @@ pub struct Processor {
     global_ipc_options: ParsedOptions,
     cli_options: CliOptions,
     config: Rc<UiConfig>,
+    /// Tiling window multiplexer.
+    multiplexer: Multiplexer,
+    /// Prefix key mode for tmux-style bindings.
+    prefix_mode: bool,
 }
 
 impl Processor {
@@ -129,6 +136,13 @@ impl Processor {
                 ConfigMonitor::new(config.config_paths.clone(), event_loop.create_proxy());
         }
 
+        // Initialize multiplexer with default session.
+        let mut multiplexer = Multiplexer::new();
+        if let Err(e) = multiplexer.initialize_default_session() {
+            log::warn!("Failed to initialize default session: {}", e);
+        }
+        log::info!("cmux multiplexer initialized");
+
         Processor {
             initial_window_options,
             initial_window_error: None,
@@ -142,6 +156,8 @@ impl Processor {
             #[cfg(unix)]
             global_ipc_options: Default::default(),
             config_monitor,
+            multiplexer,
+            prefix_mode: false,
         }
     }
 
@@ -162,8 +178,11 @@ impl Processor {
         )?;
 
         self.gl_config = Some(window_context.display.gl_context().config());
-        self.windows.insert(window_context.id(), window_context);
-
+        
+        // Register window with multiplexer.
+        let winit_id = window_context.id();
+        self.windows.insert(winit_id, window_context);
+        
         Ok(())
     }
 
@@ -191,8 +210,124 @@ impl Processor {
             config_overrides,
         )?;
 
-        self.windows.insert(window_context.id(), window_context);
+        let winit_id = window_context.id();
+        self.windows.insert(winit_id, window_context);
         Ok(())
+    }
+
+    /// Split the current pane horizontally (creates pane below).
+    pub fn split_pane_horizontal(&mut self, _window_id: WindowId) {
+        log::info!("Split pane horizontal - not yet implemented");
+        // TODO: Create new terminal and split pane in multiplexer
+    }
+
+    /// Split the current pane vertically (creates pane to the right).
+    pub fn split_pane_vertical(&mut self, _window_id: WindowId) {
+        log::info!("Split pane vertical - not yet implemented");
+        // TODO: Create new terminal and split pane in multiplexer
+    }
+
+    /// Navigate to pane in the specified direction.
+    pub fn navigate_pane(&mut self, window_id: WindowId, direction: PaneDirection) {
+        if let Some(session_window_id) = self.multiplexer.get_window_id(window_id) {
+            if let Some(_pane_id) = self.multiplexer.navigate_pane(session_window_id, direction) {
+                log::debug!("Navigated to pane in {:?} direction", direction);
+            }
+        }
+    }
+
+    /// Close the current pane.
+    pub fn close_pane(&mut self, window_id: WindowId) {
+        if let Some(session_window_id) = self.multiplexer.get_window_id(window_id) {
+            if self.multiplexer.close_pane(session_window_id) {
+                log::info!("Closed pane");
+            }
+        }
+    }
+
+    /// Handle tmux-style prefix key commands.
+    pub fn handle_prefix_key(&mut self, key: &str, window_id: WindowId) -> bool {
+        match key {
+            // Pane splitting
+            "%" => {
+                self.split_pane_vertical(window_id);
+                true
+            }
+            "\"" => {
+                self.split_pane_horizontal(window_id);
+                true
+            }
+            // Pane navigation
+            "ArrowUp" | "k" => {
+                self.navigate_pane(window_id, PaneDirection::Up);
+                true
+            }
+            "ArrowDown" | "j" => {
+                self.navigate_pane(window_id, PaneDirection::Down);
+                true
+            }
+            "ArrowLeft" | "h" => {
+                self.navigate_pane(window_id, PaneDirection::Left);
+                true
+            }
+            "ArrowRight" | "l" => {
+                self.navigate_pane(window_id, PaneDirection::Right);
+                true
+            }
+            // Close pane
+            "x" => {
+                self.close_pane(window_id);
+                true
+            }
+            // Create new window
+            "c" => {
+                let _ = self.proxy.send_event(Event::new(EventType::CreateWindow(WindowOptions::default()), None));
+                true
+            }
+            // Next window
+            "n" => {
+                self.multiplexer.next_window();
+                true
+            }
+            // Previous window
+            "p" => {
+                self.multiplexer.previous_window();
+                true
+            }
+            // Rename window
+            "," => {
+                // TODO: Show input prompt for window name
+                true
+            }
+            // Detach session
+            "d" => {
+                self.multiplexer.detach_session();
+                true
+            }
+            // List sessions
+            "s" => {
+                let sessions = self.multiplexer.list_sessions();
+                log::info!("Sessions:\n{}", sessions);
+                true
+            }
+            // Show help
+            "?" => {
+                log::info!("cmux prefix key commands:\n\
+                    % - Split vertically\n\
+                    \" - Split horizontally\n\
+                    Arrow keys/hjkl - Navigate panes\n\
+                    x - Close pane\n\
+                    c - Create new window\n\
+                    n - Next window\n\
+                    p - Previous window\n\
+                    , - Rename window\n\
+                    d - Detach session\n\
+                    s - List sessions\n\
+                    ? - Show help");
+                true
+            }
+            _ => false,
+        }
     }
 
     /// Handle control commands from IPC.
@@ -618,6 +753,35 @@ impl ApplicationHandler<Event> for Processor {
     ) {
         if self.config.debug.print_events {
             info!(target: LOG_TARGET_WINIT, "{event:?}");
+        }
+
+        // Handle prefix key mode for cmux tiling commands.
+        if let WindowEvent::KeyboardInput { event: key_event, .. } = &event {
+            if key_event.state == ElementState::Pressed {
+                let mods = self.windows.get(&window_id).map(|w| w.modifiers().state()).unwrap_or_default();
+                let key_text = key_event.text.as_ref().map(|s| s.as_str()).unwrap_or("");
+                
+                // Check for Ctrl-b prefix key.
+                if mods.control_key() && key_text == "b" && !self.prefix_mode {
+                    self.prefix_mode = true;
+                    log::info!("cmux prefix mode activated");
+                    return;
+                }
+                
+                // If in prefix mode, handle the command key.
+                if self.prefix_mode {
+                    self.prefix_mode = false;
+                    let key_name = if key_text.is_empty() {
+                        format!("{:?}", key_event.logical_key)
+                    } else {
+                        key_text.to_string()
+                    };
+                    
+                    if self.handle_prefix_key(&key_name, window_id) {
+                        return;
+                    }
+                }
+            }
         }
 
         // Ignore all events we do not care about.

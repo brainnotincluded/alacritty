@@ -509,6 +509,11 @@ impl WindowContext {
         self.display.window.id()
     }
 
+    /// Get the current modifiers state.
+    pub fn modifiers(&self) -> &Modifiers {
+        &self.modifiers
+    }
+
     /// Write the ref test results to the disk.
     pub fn write_ref_test_results(&self) {
         // Dump grid state.
