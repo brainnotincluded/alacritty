@@ -802,13 +802,13 @@ impl ApplicationHandler<Event> for Processor {
                 }
             };
             
-            log::info!("Key debug: char={:?} logical={:?} without_mods={:?} cmd={} shift={} mods={:?}", 
+            log::warn!("Key debug: char={:?} logical={:?} without_mods={:?} cmd={} shift={} mods={:?}", 
                      key_char, key_event.logical_key, key_event.key_without_modifiers(), is_cmd, mods.shift_key(), mods);
             
             // Cmd+B (or Ctrl+B) - Activate prefix mode.
             if is_cmd && key_char.as_deref() == Some("b") && !self.prefix_mode {
                 self.prefix_mode = true;
-                log::info!("cmux prefix mode activated - press a command key");
+                log::warn!("cmux prefix mode activated - press a command key");
                 return;
             }
             
@@ -817,7 +817,7 @@ impl ApplicationHandler<Event> for Processor {
                 self.prefix_mode = false;
                 let key_name = key_char.clone().unwrap_or_default();
                 
-                log::info!("Prefix command: '{}'", key_name);
+                log::warn!("Prefix command: '{}'", key_name);
                 
                 if !key_name.is_empty() && self.handle_prefix_key(&key_name, window_id) {
                     return;
@@ -832,37 +832,37 @@ impl ApplicationHandler<Event> for Processor {
                     match key_char.as_deref() {
                         // Cmd+D - Split vertically (without shift)
                         Some("d") if !mods.shift_key() => {
-                            log::info!("Cmd+D: Split vertical");
+                            log::warn!("Cmd+D: Split vertical");
                             self.split_pane_vertical(window_id);
                             return;
                         }
                         // Cmd+Shift+D - Split horizontally (with shift)
                         Some("d") if mods.shift_key() => {
-                            log::info!("Cmd+Shift+D: Split horizontal");
+                            log::warn!("Cmd+Shift+D: Split horizontal");
                             self.split_pane_horizontal(window_id);
                             return;
                         }
                         // Cmd+W - Close pane
                         Some("w") => {
-                            log::info!("Cmd+W: Close pane");
+                            log::warn!("Cmd+W: Close pane");
                             self.close_pane(window_id);
                             return;
                         }
                         // Cmd+T - New window
                         Some("t") => {
-                            log::info!("Cmd+T: New window");
+                            log::warn!("Cmd+T: New window");
                             let _ = self.proxy.send_event(Event::new(EventType::CreateWindow(WindowOptions::default()), None));
                             return;
                         }
                         // Cmd+[ - Previous window
                         Some("[") => {
-                            log::info!("Cmd+[: Previous window");
+                            log::warn!("Cmd+[: Previous window");
                             self.multiplexer.previous_window();
                             return;
                         }
                         // Cmd+] - Next window
                         Some("]") => {
-                            log::info!("Cmd+]: Next window");
+                            log::warn!("Cmd+]: Next window");
                             self.multiplexer.next_window();
                             return;
                         }
@@ -873,22 +873,22 @@ impl ApplicationHandler<Event> for Processor {
                 if is_cmd && !mods.shift_key() {
                     let handled = match key_event.logical_key.as_ref() {
                         winit::keyboard::Key::Named(winit::keyboard::NamedKey::ArrowUp) => {
-                            log::info!("Cmd+Up: Navigate up");
+                            log::warn!("Cmd+Up: Navigate up");
                             self.navigate_pane(window_id, PaneDirection::Up);
                             true
                         }
                         winit::keyboard::Key::Named(winit::keyboard::NamedKey::ArrowDown) => {
-                            log::info!("Cmd+Down: Navigate down");
+                            log::warn!("Cmd+Down: Navigate down");
                             self.navigate_pane(window_id, PaneDirection::Down);
                             true
                         }
                         winit::keyboard::Key::Named(winit::keyboard::NamedKey::ArrowLeft) => {
-                            log::info!("Cmd+Left: Navigate left");
+                            log::warn!("Cmd+Left: Navigate left");
                             self.navigate_pane(window_id, PaneDirection::Left);
                             true
                         }
                         winit::keyboard::Key::Named(winit::keyboard::NamedKey::ArrowRight) => {
-                            log::info!("Cmd+Right: Navigate right");
+                            log::warn!("Cmd+Right: Navigate right");
                             self.navigate_pane(window_id, PaneDirection::Right);
                             true
                         }
