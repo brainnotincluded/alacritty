@@ -255,8 +255,29 @@ impl Processor {
     pub fn close_pane(&mut self, window_id: WindowId) {
         if let Some(session_window_id) = self.multiplexer.get_window_id(window_id) {
             if self.multiplexer.close_pane(session_window_id) {
-                log::info!("Closed pane");
+                log::warn!("Closed pane");
             }
+        }
+        // Also close the window by exiting its terminal
+        if let Some(window_context) = self.windows.get_mut(&window_id) {
+            window_context.terminal().exit();
+            log::warn!("Closing window");
+        }
+    }
+    
+    /// Go to next window.
+    pub fn goto_next_window(&mut self) {
+        if let Some(next_id) = self.multiplexer.next_window() {
+            log::warn!("Next window: {:?}", next_id);
+            // TODO: Focus the window - requires platform-specific window activation
+        }
+    }
+    
+    /// Go to previous window.
+    pub fn goto_previous_window(&mut self) {
+        if let Some(prev_id) = self.multiplexer.previous_window() {
+            log::warn!("Previous window: {:?}", prev_id);
+            // TODO: Focus the window - requires platform-specific window activation
         }
     }
 
@@ -872,13 +893,13 @@ impl ApplicationHandler<Event> for Processor {
                         // Cmd+[ - Previous window
                         Some("[") => {
                             log::warn!("Cmd+[: Previous window");
-                            self.multiplexer.previous_window();
+                            self.goto_previous_window();
                             return;
                         }
                         // Cmd+] - Next window
                         Some("]") => {
                             log::warn!("Cmd+]: Next window");
-                            self.multiplexer.next_window();
+                            self.goto_next_window();
                             return;
                         }
                         _ => {}
