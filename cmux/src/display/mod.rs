@@ -61,6 +61,7 @@ pub mod color;
 pub mod content;
 pub mod cursor;
 pub mod hint;
+pub mod ui;
 pub mod window;
 
 mod bell;
@@ -397,6 +398,9 @@ pub struct Display {
 
     glyph_cache: GlyphCache,
     meter: Meter,
+    
+    /// UI renderer for cmux multiplexer.
+    pub ui_renderer: ui::UiRenderer,
 }
 
 impl Display {
@@ -539,6 +543,7 @@ impl Display {
             cursor_hidden: Default::default(),
             meter: Default::default(),
             ime: Default::default(),
+            ui_renderer: ui::UiRenderer::default(),
         })
     }
 
